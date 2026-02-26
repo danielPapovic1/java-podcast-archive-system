@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.5.11</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.daniel.podcast</groupId>
+	<artifactId>podcastarchive</artifactId>
+	<version>1.1.1</version>
+	<name>podcastarchive</name>
+	<description>Podcast archive system</description>
+	<url/>
+	<licenses>
+		<license/>
+	</licenses>
+	<developers>
+		<developer/>
+	</developers>
+	<scm>
+		<connection/>
+		<developerConnection/>
+		<tag/>
+		<url/>
+	</scm>
+	<properties>
+		<java.version>17</java.version>
+		<!--compile target is Java 17 bytecode. -->
+		<!--mvn -v showing Java 21 means Maven is running on JDK 21 -->
+	</properties>
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId> 
+			<!-- // Spring Boot Web starter provides Spring MVC, embedded Tomcat, and JSON handling for HTTP APIs. -->
+			<!-- Tomcat web server designed for java. -->
+		</dependency>
+
+		<dependency>
+			<groupId>com.rometools</groupId> <!-- Creates RSS feed from Jaudiotagger metadata -->
+			<artifactId>rome</artifactId>
+			<version>1.18.0</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.rometools</groupId>
+			<artifactId>rome-modules</artifactId> <!-- // rome-modules extends the base Rome RSS library with namespace modules (like iTunes) -->
+            <!-- Gives typed, supported classes for those tags, which is safer and cleaner than manually building XML elements/strings -->
+			<version>1.18.0</version>
+		</dependency>
+
+		<dependency>
+			<groupId>net.jthink</groupId>
+			<artifactId>jaudiotagger</artifactId> <!-- ID3 metadata handler -->
+			<version>3.0.1</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-devtools</artifactId> <!-- when change Java files and save, Spring should auto-restart the app. -->
+			<scope>runtime</scope>
+			<optional>true</optional>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<useFile>false</useFile>
+					<redirectTestOutputToFile>false</redirectTestOutputToFile>
+					<!-- Thought I needed it but then realized mvn test always runs the Surefire plugin phase-->
+					<!-- But Surefire still needs a test framework/provider (like JUnit) to find and execute tests. -->
+					<printSummary>true</printSummary>
+					<trimStackTrace>false</trimStackTrace>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

@@ -1,0 +1,150 @@
+1-  Health endpoint are safe from directory traversal because they do not access the filesystem. 
+    They simply return a response and do not use user input to resolve file paths. Filesystem endpoints are 
+    different because they take user input and interact with disk paths,
+    so they must normalize and validate paths to prevent escaping the allowed media directory.
+
+
+
+2-  Step 2 (Config + Filesystem + JSON Feed) was implemented as the pre-RSS foundation so we could verify
+    media discovery and safe file serving before adding XML complexity.
+
+   
+      - /feed lists available episodes (currently JSON for easy inspection).
+      - /file/{filename}.mp3 serves actual MP3 bytes.
+      - Centralized filesystem safety in FileResolver instead of duplicating path logic in controllers.
+      This keeps security rules consistent and easier to maintain.
+    - Config binding (podcast.mediaDir and podcast.baseUrl) so file location and generated
+      links are environment-driven, not hardcoded in controllers.
+
+    - FileResolver resolves requested names against podcast.mediaDir, normalizes paths, and rejects
+      anything outside the allowed root (prevents ../ traversal escape).
+    - Only .mp3 files are accepted for serving.
+    - Missing/invalid requests return 404.
+
+
+3-  Added MP3 metadata parsing to enrich `/feed`.
+    - Step 2: `/feed` returned basic file info (`name`, `url`) from filesystem listing.
+    - Step 3: `/feed` now also returns `title`, `artist`, `album`, and `duration` from MP3 tags.
+    - Missing tags are handled with safe fallbacks so feed output stays consistent.
+    - `/file/{filename}.mp3` behavior and FileResolver security rules are unchanged from Step 2.
+
+    - Used MP3 Tag program to add metadata ID3 tags manually to audio files, instead of all of them saying unknown. 
+    
+
+    - (Side Note) // Spring runs with an embedded web server, so it must bind to an explicit local port (default 8080);
+                  // PHP setups often hide this because Apache/Nginx/PHP-FPM is already running on default HTTP ports (80/443).
+
+
+4-  Step 4.1 improved RSS date handling without changing JSON `/feed` or `/file`.
+    - RSS now uses real date precision from MP3 tags (year, year-month, date, or full datetime).
+    - `<pubDate>` is only set when full date+time exists.
+    - Partial dates are kept in `<dc:date>` instead of inventing missing month/day/time.
+    - If no date is parseable, date tags are omitted for that item.
+    // With @Controller, returning "home" is treated as a view/template name (for example templates/home.html),
+    // not as raw API response text like with RestController
+    
+
+5-  
+    Added podcast-client compatibility polish for RSS using iTunes-friendly metadata,
+    stable GUIDs, and validated enclosures.
+
+    Why this helps across services:
+    Most podcast apps read standard RSS tags plus iTunes extension tags together.
+    Including both improves compatibility so episode metadata appears correctly in more clients.
+
+    Tag reference (what it does + how we generate it):
+    - `<enclosure url="..." type="audio/mpeg" length="...">`
+      Purpose: tells clients where audio is and how to stream/download it.
+      Generated: in `RssFeedService.toItem()` from file URL + file size bytes.
+    - `<guid isPermaLink="false">urn:podcastarchive:...</guid>`
+      Purpose: stable unique episode identity (prevents duplicate episodes in clients).
+      Generated: in `RssFeedService.buildStableGuid()` from SHA-256 of normalized filename.
+      Clients treat the GUID text (urn:podcastarchive:...) as the stable episode ID. 
+    - `<author>`
+      Purpose: standard RSS creator/author field.
+      Generated: in `RssFeedService.toItem()` from `PodcastEpisode.artist`.
+    - `<description>`
+      Purpose: standard RSS episode text summary.
+      Generated: in `RssFeedService.toDescription()` from `PodcastEpisode.description`.
+    - `<pubDate>`
+      Purpose: standard RSS publish timestamp used by many clients for ordering.
+      Generated: only when full date+time exists from parsed metadata (`EpisodeDateParts`).
+    - `<dc:date>`
+      Purpose: carries partial date precision when full timestamp is not available.
+      Generated: in `RssFeedService.addDcDate()` from `EpisodeDateParts.toIsoPartial()`.
+    - `<itunes:author>`
+      Purpose: iTunes-compatible author field used by many podcast apps.
+      Generated: item module in `RssFeedService.addITunesItemModule()` from artist.
+    - `<itunes:subtitle>` (album mapping)
+      Purpose: short secondary line for episode metadata.
+      Generated: item module in `RssFeedService.addITunesItemModule()` from album.
+    - `<itunes:summary>`
+      Purpose: iTunes-compatible episode summary text.
+      Generated: item module in `RssFeedService.addITunesItemModule()` from description.
+      Many podcast clients prefer itunes:summary when present, while others use/fallback to standard description, so we include both.
+    - `<itunes:duration>`
+      Purpose: iTunes-compatible duration display.
+      Generated: item module in `RssFeedService.addITunesItemModule()` from duration seconds.
+    - `<itunes:explicit>`
+      Purpose: explicit-content flag for channel/items.
+      Generated: from config `podcast.explicit` through `PodcastProperties`.
+    - `<itunes:image href="...">` (optional)
+      Purpose: podcast artwork URL for compatible clients.
+      Generated: channel module in `RssFeedService.addITunesChannelModule()` only when
+      `podcast.channelImageUrl` is configured (non-blank).
+
+    - RssFeedService builds the RSS object structure (channel/items/modules),
+      and Rome serializes that structure into the final XML string.
+      "Serializes" means Rome takes the in-memory RSS objects and converts them into raw XML text sent in the HTTP response.
+
+      Object structure -> XML example:
+      Channel(title="Podcast Archive")
+      Item(title="episode-1", guid="urn:podcastarchive:...", enclosure=url/type/length)
+      becomes:
+      <channel><title>Podcast Archive</title><item><title>episode-1</title><guid>...</guid><enclosure .../></item></channel>
+
+
+    Generation sources:
+    - Episode-derived fields come from `Mp3MetadataService` via `PodcastEpisode`.
+    - Config-derived fields come from `PodcastProperties`.
+    - Final RSS assembly/serialization happens in `RssFeedService`.
+
+    Caveats:
+    - Empty `itunes:keywords` tags are stripped from output.
+    - GUID is filename-hash based, so it remains stable even if `podcast.baseUrl` changes.
+    - `pubDate` requires full date+time; partial precision is stored in `dc:date`.
+
+
+    Note: 
+    Things I want to add:
+    - Add owner values so iTunes owner block is populated (name + email), not empty.
+    - Keep image optional but supported via config URL.
+    - In browser requests, /feed can default to RSS because browser Accept headers commonly include application/xml
+    - To force JSON: curl.exe -H "Accept: application/json" http://localhost:8080/feed
+
+    Tests validate behavior by calling real project classes with controlled inputs,
+    then asserting the returned result matches the expected output.
+    In practice, each test sets up a known scenario, runs the target method/endpoint,
+    and compares "actual vs expected" so regressions are caught automatically.
+    Example: build RSS with two different baseUrl values and assert GUID is identical,
+    proving episode identity is stable even when deployment URL changes.
+
+    **MP3 files stay in podcasts/ as source content we parse into RSS items,
+    while images are served from static so they have direct public web URLs (for tags like itunes:image).**
+
+
+    GUID identifies the episode (used by podcast apps for dedupe/tracking identity),
+    while enclosure points to the actual audio file URL used for playback/download.
+    They do not need to match: GUID can be a stable ID/permalink, and enclosure is the media location.
+
+    podcasts/ is not exposed directly to the web browser like static images;
+
+
+    Files to update:
+    - `src/main/resources/application.properties`
+      Add: `podcast.ownerName`, `podcast.ownerEmail` (and keep `podcast.channelImageUrl`).
+    - `src/main/java/com/daniel/podcast/podcastarchive/config/PodcastProperties.java`
+      Add: `ownerName` + `ownerEmail` fields, getters/setters, optional helper methods.
+    - `src/main/java/com/daniel/podcast/podcastarchive/feed/RssFeedService.java`
+      In `addITunesChannelModule(...)`, set:
+      `iTunes.setOwnerName(...)` and `iTunes.setOwnerEmailAddress(...)`.

@@ -133,9 +133,6 @@ curl -H "Accept: application/json" http://localhost:8080/feed
 
 # Force RSS
 curl -H "Accept: application/rss+xml" http://localhost:8080/feed
-
-# Also force RSS via query
-curl http://localhost:8080/feed?format=rss
 ```
 
 GUID vs enclosure:
@@ -173,11 +170,3 @@ Run all tests:
 ```bash
 mvn test
 ```
-
-## Git Push Checklist
-- Ensure `target/` is not committed.
-- Confirm `.gitignore` includes build/editor noise.
-- Confirm desired assets are included:
-  - `podcasts/` (if intentionally tracked)
-  - `src/main/resources/static/images/`
-- Run tests before push: `mvn test`.
